@@ -1,19 +1,10 @@
 import express from "express";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
 import db from "../db.js";
+import { upload, cloudinary } from "../config/cloudinary.js";
 
 const router = express.Router();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) =>
-    cb(null, Date.now() + path.extname(file.originalname)),
-});
-
-const upload = multer({ storage });
-
+// Obtener todos los artículos
 router.get("/", (req, res) => {
   const q = "SELECT * FROM Shop";
   db.query(q, (err, data) => {
@@ -22,17 +13,22 @@ router.get("/", (req, res) => {
   });
 });
 
-//Crear articulos
-
+// Crear artículo con múltiples imágenes
 router.post("/crear", upload.array("cover"), (req, res) => {
   const { nombre_Shop, contenido_Shop, precio_Shop } = req.body;
 
-  const coverFiles = req.files?.map((file) => file.filename) || [];
-  const cover = coverFiles.join(","); // Almacena los nombres separados por comas
-
-  if (!nombre_Shop || !contenido_Shop || !precio_Shop) {
-    return res.status(400).json({ message: "Todos los campos son obligatorios" });
+  if (!nombre_Shop || !contenido_Shop || !precio_Shop || !req.files.length) {
+    return res
+      .status(400)
+      .json({ message: "Todos los campos son obligatorios" });
   }
+
+  const coverData = req.files.map((file) => ({
+    url: file.path,         // secure_url
+    public_id: file.filename, // public_id
+  }));
+
+  const cover = JSON.stringify(coverData);
 
   const q = `
     INSERT INTO Shop (nombre_Shop, contenido_Shop, precio_Shop, id_Administrador, cover)
@@ -46,47 +42,54 @@ router.post("/crear", upload.array("cover"), (req, res) => {
   });
 });
 
-//Actualizar articulo
-router.put("/", upload.single("cover"), (req, res) => {
+// Actualizar artículo (opcionalmente reemplazar imágenes)
+router.put("/", upload.array("cover"), (req, res) => {
   const { id_Shop, nombre_Shop, contenido_Shop, precio_Shop } = req.body;
-  const cover = req.file?.filename;
 
-  let q = cover
-    ? `UPDATE Shop SET nombre_Shop=?,contenido_Shop=?,precio_Shop=?,cover=? WHERE id_Shop=?`
-    : `UPDATE Shop SET nombre_Shop=?,contenido_Shop=?,precio_Shop=? WHERE id_Shop=?`;
-  const valores = cover
-    ? [nombre_Shop, contenido_Shop, precio_Shop, cover, id_Shop]
+  const newCoverData = req.files.map((file) => ({
+    url: file.path,
+    public_id: file.filename,
+  }));
+
+  const newCover = newCoverData.length ? JSON.stringify(newCoverData) : null;
+
+  const q = newCover
+    ? `UPDATE Shop SET nombre_Shop=?, contenido_Shop=?, precio_Shop=?, cover=? WHERE id_Shop=?`
+    : `UPDATE Shop SET nombre_Shop=?, contenido_Shop=?, precio_Shop=? WHERE id_Shop=?`;
+
+  const values = newCover
+    ? [nombre_Shop, contenido_Shop, precio_Shop, newCover, id_Shop]
     : [nombre_Shop, contenido_Shop, precio_Shop, id_Shop];
-  db.query(q, valores, (err, result) => {
-    if (err)
-      return res.status(500).json({ error: "Error al actualizar articulo" });
-    return res.json({ message: "✅ Artículo actualizado correctamente" });
 
+  db.query(q, values, (err) => {
+    if (err) return res.status(500).json({ error: "Error al actualizar artículo" });
+    return res.json({ message: "✅ Artículo actualizado correctamente" });
   });
-  
 });
 
-//Eliminar articulos
-
+// Eliminar artículo + imágenes de Cloudinary
 router.delete("/:id_Shop", (req, res) => {
   const id_Shop = req.params.id_Shop;
-  const getImageQuery = `SELECT cover FROM Shop WHERE id_Shop = ?`;
+  const qGet = `SELECT cover FROM Shop WHERE id_Shop = ?`;
+  const qDelete = `DELETE FROM Shop WHERE id_Shop = ?`;
 
-  db.query(getImageQuery, [id_Shop], (err, result) => {
-    if (err)
-      return res.status(500).json({ error: "Error al eliminar la imagen" });
-    if (!result.length)
-      return res.status(404).json({ message: "❌ Articulo no encontrado" });
+  db.query(qGet, [id_Shop], async (err, result) => {
+    if (err || result.length === 0)
+      return res.status(500).json({ error: "Error obteniendo imagen" });
 
-    const cover = result[0].cover;
-    const deleteQuery = `DELETE FROM Shop WHERE id_Shop = ?`;
+    const coverData = JSON.parse(result[0].cover || "[]");
 
-    db.query(deleteQuery, [id_Shop], (err) => {
-      if (err)
-        return res.status(500).json({ error: "Error al eliminar articulo" });
-      if (cover) fs.unlink(`uploads/${cover}`, () => {});
+    for (const img of coverData) {
+      try {
+        await cloudinary.uploader.destroy(img.public_id);
+      } catch (error) {
+        console.error("❌ Error eliminando imagen de Cloudinary:", img.public_id);
+      }
+    }
 
-      return res.json({ message: "✅ Articulo eliminado correctamente" });
+    db.query(qDelete, [id_Shop], (err) => {
+      if (err) return res.status(500).json({ error: "Error al eliminar artículo" });
+      return res.json({ message: "✅ Artículo e imágenes eliminadas correctamente" });
     });
   });
 });
