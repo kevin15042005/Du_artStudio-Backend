@@ -81,8 +81,8 @@ router.put("/:id", upload.array("cover", 3), async (req, res) => {
       }
 
       const newCoverData = req.files.map((file) => ({
-        url: file.path,
-        public_id: file.filename,
+        url: file.secure_url, 
+        public_id: file.public_id, 
       }));
 
       newCover = JSON.stringify(newCoverData);
