@@ -1,20 +1,25 @@
+// ✅ BACKEND: rutas de Noticias_Pintura
 import express from "express";
 import db from "../db.js";
 import { upload, cloudinary } from "../config/cloudinary.js";
 
 const router = express.Router();
 
-// ✅ Obtener todas las noticias de pintura
-router.get("/", (req, res) => {
-  const q = "SELECT * FROM Noticias_Pintura ORDER BY fecha_Publicacion DESC";
-  db.query(q, (err, data) => {
-    if (err) return res.status(500).json({ error: "Error al obtener noticias" });
-    return res.json(data);
-  });
+// Obtener todas las noticias de pintura
+router.get("/", async (req, res) => {
+  try {
+    const [noticias] = await db.promise().query(
+      `SELECT id_Noticias_Pintura, nombre_Noticia_Pintura, contenido_Noticia_Pintura, fecha_Publicacion, cover FROM Noticias_Pintura ORDER BY fecha_Publicacion DESC`
+    );
+    res.json(noticias);
+  } catch (err) {
+    console.error("Error al obtener noticias de pintura:", err);
+    res.status(500).json({ error: "Error al obtener noticias de pintura" });
+  }
 });
 
-// ✅ Crear noticia con múltiples imágenes
-router.post("/crear", upload.array("cover"), (req, res) => {
+// Crear noticia de pintura con Cloudinary
+router.post("/crear", upload.array("cover"), async (req, res) => {
   const { nombre_Noticia_Pintura, contenido_Noticia_Pintura } = req.body;
 
   if (!nombre_Noticia_Pintura || !contenido_Noticia_Pintura || !req.files.length) {
@@ -22,21 +27,13 @@ router.post("/crear", upload.array("cover"), (req, res) => {
   }
 
   const coverData = req.files.map((file) => ({
-    url: file.path, // secure_url
-    public_id: file.filename,
+    url: file.secure_url,
+    public_id: file.public_id,
   }));
 
   const cover = JSON.stringify(coverData);
 
-  const q = `
-    INSERT INTO Noticias_Pintura (
-      nombre_Noticia_Pintura,
-      contenido_Noticia_Pintura,
-      fecha_Publicacion,
-      id_Administrador,
-      cover
-    )
-    VALUES (?, ?, NOW(), ?, ?)`;
+  const q = `INSERT INTO Noticias_Pintura (nombre_Noticia_Pintura, contenido_Noticia_Pintura, fecha_Publicacion, id_Administrador, cover) VALUES (?, ?, NOW(), ?, ?)`;
 
   db.query(q, [nombre_Noticia_Pintura, contenido_Noticia_Pintura, 1, cover], (err) => {
     if (err) return res.status(500).json({ error: "Error al insertar noticia" });
@@ -44,15 +41,33 @@ router.post("/crear", upload.array("cover"), (req, res) => {
   });
 });
 
-// ✅ Actualizar noticia (opcionalmente reemplazar imágenes)
-router.put("/", upload.array("cover"), (req, res) => {
+// Actualizar noticia de pintura con Cloudinary
+router.put("/", upload.array("cover"), async (req, res) => {
   const { id_Noticias_Pintura, nombre_Noticia_Pintura, contenido_Noticia_Pintura } = req.body;
 
-  const newCoverData = req.files.map((file) => ({
-    url: file.path,
-    public_id: file.filename,
-  }));
-  const newCover = newCoverData.length ? JSON.stringify(newCoverData) : null;
+  let newCover = null;
+  if (req.files.length > 0) {
+    const [result] = await db.promise().query(
+      `SELECT cover FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?`,
+      [id_Noticias_Pintura]
+    );
+
+    const oldCover = JSON.parse(result[0].cover || "[]");
+    for (const img of oldCover) {
+      try {
+        await cloudinary.uploader.destroy(img.public_id);
+      } catch (err) {
+        console.warn("⚠️ Error eliminando imagen previa:", img.public_id);
+      }
+    }
+
+    const newCoverData = req.files.map((file) => ({
+      url: file.secure_url,
+      public_id: file.public_id,
+    }));
+
+    newCover = JSON.stringify(newCoverData);
+  }
 
   const q = newCover
     ? `UPDATE Noticias_Pintura SET nombre_Noticia_Pintura=?, contenido_Noticia_Pintura=?, cover=? WHERE id_Noticias_Pintura=?`
@@ -68,31 +83,51 @@ router.put("/", upload.array("cover"), (req, res) => {
   });
 });
 
-// ✅ Eliminar noticia + imágenes de Cloudinary
-router.delete("/:id_Noticias_Pintura", (req, res) => {
-  const id = req.params.id_Noticias_Pintura;
-  const qGet = `SELECT cover FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?`;
-  const qDelete = `DELETE FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?`;
+// Eliminar noticia de pintura
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [noticia] = await db.promise().query(
+      "SELECT cover FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?",
+      [id]
+    );
 
-  db.query(qGet, [id], async (err, result) => {
-    if (err || result.length === 0)
-      return res.status(500).json({ error: "Error al obtener noticia" });
+    if (noticia.length === 0) {
+      return res.status(404).json({ error: "Noticia no encontrada" });
+    }
 
-    const coverData = JSON.parse(result[0].cover || "[]");
+    let coverData = [];
+
+    try {
+      coverData = JSON.parse(noticia[0].cover || "[]");
+    } catch {
+      const stringCovers = (noticia[0].cover || "").split(",");
+      coverData = stringCovers.map((filename) => ({ public_id: filename.trim() }));
+    }
 
     for (const img of coverData) {
-      try {
-        await cloudinary.uploader.destroy(img.public_id);
-      } catch (error) {
-        console.error("❌ Error eliminando imagen Cloudinary:", img.public_id);
+      if (img.public_id) {
+        try {
+          await cloudinary.uploader.destroy(img.public_id);
+        } catch (err) {
+          console.error("❌ Error eliminando imagen:", img.public_id);
+        }
       }
     }
 
-    db.query(qDelete, [id], (err) => {
-      if (err) return res.status(500).json({ error: "Error al eliminar noticia" });
-      return res.json({ message: "✅ Noticia e imágenes eliminadas correctamente" });
-    });
-  });
+    const [result] = await db
+      .promise()
+      .query("DELETE FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?", [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "No se pudo eliminar" });
+    }
+
+    res.json({ message: "✅ Noticia e imágenes eliminadas correctamente" });
+  } catch (err) {
+    console.error("❌ Error al eliminar noticia:", err);
+    res.status(500).json({ error: "Error al eliminar noticia" });
+  }
 });
 
 export default router;
