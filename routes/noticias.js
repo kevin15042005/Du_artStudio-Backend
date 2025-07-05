@@ -123,18 +123,34 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Noticia no encontrada" });
     }
 
-    const coverData = JSON.parse(noticia[0].cover || "[]");
+    let coverData = [];
 
-    // Eliminar imágenes de Cloudinary
+    try {
+      // ✅ Si cover es un JSON válido
+      coverData = JSON.parse(noticia[0].cover || "[]");
+    } catch (err) {
+      console.warn(
+        "⚠️ Cover no es JSON válido, intentando como string separado por comas."
+      );
+      // ✅ Si es una cadena separada por comas (ej: "img1.jpg,img2.jpg")
+      const stringCovers = (noticia[0].cover || "").split(",");
+      coverData = stringCovers.map((filename) => ({
+        public_id: filename.trim(), // asume que filename === public_id
+      }));
+    }
+
+    // ✅ Eliminar imágenes de Cloudinary
     for (const img of coverData) {
-      try {
-        await cloudinary.uploader.destroy(img.public_id);
-      } catch (err) {
-        console.error("❌ Error eliminando imagen:", img.public_id);
+      if (img.public_id) {
+        try {
+          await cloudinary.uploader.destroy(img.public_id);
+        } catch (err) {
+          console.error("❌ Error eliminando imagen:", img.public_id);
+        }
       }
     }
 
-    // Eliminar noticia de la base de datos
+    // ✅ Eliminar la noticia
     const [result] = await db
       .promise()
       .query("DELETE FROM Noticias WHERE id_Noticia = ?", [id]);
@@ -145,7 +161,7 @@ router.delete("/:id", async (req, res) => {
 
     res.json({ message: "✅ Noticia e imágenes eliminadas correctamente" });
   } catch (err) {
-    console.error("Error al eliminar noticia:", err);
+    console.error("❌ Error al eliminar noticia:", err);
     res.status(500).json({ error: "Error al eliminar noticia" });
   }
 });
