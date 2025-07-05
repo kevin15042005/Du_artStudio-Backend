@@ -1,128 +1,96 @@
 import express from "express";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
 import db from "../db.js";
+import { upload, cloudinary } from "../config/cloudinary.js";
 
 const router = express.Router();
 
-// Multer config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) =>
-    cb(null, Date.now() + path.extname(file.originalname)),
-});
-const upload = multer({ storage });
-
-// Obtener todas las noticias
+// ✅ Obtener todas las noticias de pintura
 router.get("/", (req, res) => {
-  const q = "SELECT * FROM Noticias_Pintura";
+  const q = "SELECT * FROM Noticias_Pintura ORDER BY fecha_Publicacion DESC";
   db.query(q, (err, data) => {
-    if (err) return res.status(500).json({ error: "Error en la consulta" });
+    if (err) return res.status(500).json({ error: "Error al obtener noticias" });
     return res.json(data);
   });
 });
 
-// Crear una nueva noticia Pintura
+// ✅ Crear noticia con múltiples imágenes
 router.post("/crear", upload.array("cover"), (req, res) => {
   const { nombre_Noticia_Pintura, contenido_Noticia_Pintura } = req.body;
-  const coverFiles = req.files?.map((file) => file.filename);
-  const cover = coverFiles?.join(",") || null;
-  if (
-    !nombre_Noticia_Pintura ||
-    !contenido_Noticia_Pintura ||
-    coverFiles.length === 0
-  ) {
-    return res
-      .status(400)
-      .json({ message: "Todos los campos son obligatorios" });
+
+  if (!nombre_Noticia_Pintura || !contenido_Noticia_Pintura || !req.files.length) {
+    return res.status(400).json({ message: "Todos los campos son obligatorios" });
   }
+
+  const coverData = req.files.map((file) => ({
+    url: file.path, // secure_url
+    public_id: file.filename,
+  }));
+
+  const cover = JSON.stringify(coverData);
 
   const q = `
     INSERT INTO Noticias_Pintura (
       nombre_Noticia_Pintura,
-      fecha_Publicacion,
       contenido_Noticia_Pintura,
+      fecha_Publicacion,
       id_Administrador,
       cover
     )
-    VALUES (?, NOW(), ?, ?, ?)
-  `;
+    VALUES (?, ?, NOW(), ?, ?)`;
 
-  db.query(
-    q,
-    [nombre_Noticia_Pintura, contenido_Noticia_Pintura, 1, cover],
-    (err) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ error: "Error al insertar noticia" });
-      }
-      return res.json({ message: "✅ Noticia publicada correctamente" });
-    }
-  );
+  db.query(q, [nombre_Noticia_Pintura, contenido_Noticia_Pintura, 1, cover], (err) => {
+    if (err) return res.status(500).json({ error: "Error al insertar noticia" });
+    return res.json({ message: "✅ Noticia publicada correctamente" });
+  });
 });
 
-// Actualizar una noticia
-// ✅ Ruta corregida:
-router.put("/:id_Noticias_Pintura", upload.single("cover"), (req, res) => {
-  const { nombre_Noticia_Pintura, contenido_Noticia_Pintura } = req.body;
-  const { id_Noticias_Pintura } = req.params;
-  const cover = req.file?.filename;
+// ✅ Actualizar noticia (opcionalmente reemplazar imágenes)
+router.put("/", upload.array("cover"), (req, res) => {
+  const { id_Noticias_Pintura, nombre_Noticia_Pintura, contenido_Noticia_Pintura } = req.body;
 
-  let q, valores;
-  if (cover) {
-    q = `
-      UPDATE Noticias_Pintura 
-      SET nombre_Noticia_Pintura=?, contenido_Noticia_Pintura=?, cover=? 
-      WHERE id_Noticias_Pintura=?`;
-    valores = [
-      nombre_Noticia_Pintura,
-      contenido_Noticia_Pintura,
-      cover,
-      id_Noticias_Pintura,
-    ];
-  } else {
-    q = `
-      UPDATE Noticias_Pintura 
-      SET nombre_Noticia_Pintura=?, contenido_Noticia_Pintura=? 
-      WHERE id_Noticias_Pintura=?`;
-    valores = [
-      nombre_Noticia_Pintura,
-      contenido_Noticia_Pintura,
-      id_Noticias_Pintura,
-    ];
-  }
+  const newCoverData = req.files.map((file) => ({
+    url: file.path,
+    public_id: file.filename,
+  }));
+  const newCover = newCoverData.length ? JSON.stringify(newCoverData) : null;
 
-  db.query(q, valores, (err, result) => {
-    if (err)
-      return res.status(500).json({ error: "Error al actualizar noticia" });
-    if (result.affectedRows === 0)
-      return res.status(404).json({ message: "❌ Noticia no encontrada" });
+  const q = newCover
+    ? `UPDATE Noticias_Pintura SET nombre_Noticia_Pintura=?, contenido_Noticia_Pintura=?, cover=? WHERE id_Noticias_Pintura=?`
+    : `UPDATE Noticias_Pintura SET nombre_Noticia_Pintura=?, contenido_Noticia_Pintura=? WHERE id_Noticias_Pintura=?`;
+
+  const values = newCover
+    ? [nombre_Noticia_Pintura, contenido_Noticia_Pintura, newCover, id_Noticias_Pintura]
+    : [nombre_Noticia_Pintura, contenido_Noticia_Pintura, id_Noticias_Pintura];
+
+  db.query(q, values, (err) => {
+    if (err) return res.status(500).json({ error: "Error al actualizar noticia" });
     return res.json({ message: "✅ Noticia actualizada correctamente" });
   });
 });
 
-// Eliminar noticia por ID
+// ✅ Eliminar noticia + imágenes de Cloudinary
 router.delete("/:id_Noticias_Pintura", (req, res) => {
   const id = req.params.id_Noticias_Pintura;
-  const getImageQuery =
-    "SELECT cover FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?";
-  console.log(getImageQuery, "!!!!!!!!!!!!!");
+  const qGet = `SELECT cover FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?`;
+  const qDelete = `DELETE FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?`;
 
-  db.query(getImageQuery, [id], (err, results) => {
-    if (err) return res.status(500).json({ error: "Error buscando imagen" });
-    if (!results.length)
-      return res.status(404).json({ message: "❌ Noticia no encontrada" });
+  db.query(qGet, [id], async (err, result) => {
+    if (err || result.length === 0)
+      return res.status(500).json({ error: "Error al obtener noticia" });
 
-    const imagen = results[0].cover;
-    const deleteQuery =
-      "DELETE FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?";
+    const coverData = JSON.parse(result[0].cover || "[]");
 
-    db.query(deleteQuery, [id], (err) => {
-      if (err)
-        return res.status(500).json({ error: "Error al eliminar noticia" });
-      if (imagen) fs.unlink(`uploads/${imagen}`, () => {});
-      return res.json({ message: "✅ Noticia eliminada correctamente" });
+    for (const img of coverData) {
+      try {
+        await cloudinary.uploader.destroy(img.public_id);
+      } catch (error) {
+        console.error("❌ Error eliminando imagen Cloudinary:", img.public_id);
+      }
+    }
+
+    db.query(qDelete, [id], (err) => {
+      if (err) return res.status(500).json({ error: "Error al eliminar noticia" });
+      return res.json({ message: "✅ Noticia e imágenes eliminadas correctamente" });
     });
   });
 });

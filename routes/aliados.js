@@ -1,20 +1,10 @@
 import express from "express";
 import db from "../db.js";
-import multer from "multer";
-import path from "path";
+import { upload, cloudinary } from "../config/cloudinary.js";
 
 const router = express.Router();
 
-// Configurar multer para subir imágenes
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) =>
-    cb(null, Date.now() + path.extname(file.originalname)),
-});
-
-const upload = multer({ storage });
-
-// Obtener todos los aliados
+// ✅ Obtener todos los aliados
 router.get("/", (req, res) => {
   const q = "SELECT * FROM Marcas_Aliadas";
   db.query(q, (err, data) => {
@@ -23,54 +13,63 @@ router.get("/", (req, res) => {
   });
 });
 
-// Crear un aliado
+// ✅ Crear un aliado con imagen en Cloudinary
 router.post("/", upload.single("cover"), (req, res) => {
-  const cover = req.file?.filename || null;
   const { nombre_Marcas_Aliadas } = req.body;
 
-  if (!cover || !nombre_Marcas_Aliadas) {
+  if (!nombre_Marcas_Aliadas || !req.file) {
     return res
       .status(400)
       .json({ message: "Se requiere nombre e imagen del aliado" });
   }
 
-  const q = `INSERT INTO Marcas_Aliadas (nombre_Marcas_Aliadas, imagen_Marcas_Aliadas) VALUES (?, ?)`;
+  const imageData = {
+    url: req.file.path, // secure_url
+    public_id: req.file.filename,
+  };
+  const cover = JSON.stringify(imageData);
+
+  const q = `
+    INSERT INTO Marcas_Aliadas (nombre_Marcas_Aliadas, imagen_Marcas_Aliadas)
+    VALUES (?, ?)
+  `;
+
   db.query(q, [nombre_Marcas_Aliadas, cover], (err) => {
     if (err)
       return res.status(500).json({ error: "Error al insertar aliado" });
-    return res.json({ message: "Aliado publicado correctamente" });
+    return res.json({ message: "✅ Aliado publicado correctamente" });
   });
 });
 
-// Actualizar aliado (nombre, imagen o ambos)
+// ✅ Actualizar aliado (nombre e imagen)
 router.put("/:id", upload.single("cover"), (req, res) => {
   const { id } = req.params;
-  const cover = req.file?.filename || null;
   const { nombre_Marcas_Aliadas } = req.body;
 
-  // Si no hay nada que actualizar, salir
-  if (!nombre_Marcas_Aliadas && !cover) {
-    return res.status(400).json({
-      message: "Debes enviar al menos el nombre o una imagen para actualizar",
-    });
-  }
-
-  // Construir dinámicamente la consulta SQL
-  let campos = [];
-  let valores = [];
+  const campos = [];
+  const valores = [];
 
   if (nombre_Marcas_Aliadas) {
     campos.push("nombre_Marcas_Aliadas = ?");
     valores.push(nombre_Marcas_Aliadas);
   }
 
-  if (cover) {
+  if (req.file) {
+    const newImage = JSON.stringify({
+      url: req.file.path,
+      public_id: req.file.filename,
+    });
     campos.push("imagen_Marcas_Aliadas = ?");
-    valores.push(cover);
+    valores.push(newImage);
   }
 
-  valores.push(id); // para el WHERE
+  if (!campos.length) {
+    return res.status(400).json({
+      message: "Debes enviar al menos el nombre o una imagen para actualizar",
+    });
+  }
 
+  valores.push(id);
   const q = `UPDATE Marcas_Aliadas SET ${campos.join(
     ", "
   )} WHERE id_Marcas_Aliadas = ?`;
@@ -79,24 +78,39 @@ router.put("/:id", upload.single("cover"), (req, res) => {
     if (err)
       return res.status(500).json({ error: "Error al actualizar el aliado" });
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Aliado no encontrado" });
+      return res.status(404).json({ message: "❌ Aliado no encontrado" });
     }
-    return res.json({ message: "Aliado actualizado correctamente" });
+    return res.json({ message: "✅ Aliado actualizado correctamente" });
   });
 });
 
-// Eliminar aliado
+// ✅ Eliminar aliado + imagen Cloudinary
 router.delete("/:id", (req, res) => {
   const { id } = req.params;
 
-  const q = "DELETE FROM Marcas_Aliadas WHERE id_Marcas_Aliadas = ?";
-  db.query(q, [id], (err, result) => {
-    if (err)
-      return res.status(500).json({ error: "Error al eliminar el aliado" });
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Aliado no encontrado" });
+  const qGet = "SELECT imagen_Marcas_Aliadas FROM Marcas_Aliadas WHERE id_Marcas_Aliadas = ?";
+  const qDelete = "DELETE FROM Marcas_Aliadas WHERE id_Marcas_Aliadas = ?";
+
+  db.query(qGet, [id], async (err, result) => {
+    if (err || result.length === 0) {
+      return res.status(404).json({ message: "❌ Aliado no encontrado" });
     }
-    return res.json({ message: "Aliado eliminado correctamente" });
+
+    const image = JSON.parse(result[0].imagen_Marcas_Aliadas || "{}");
+
+    if (image.public_id) {
+      try {
+        await cloudinary.uploader.destroy(image.public_id);
+      } catch (error) {
+        console.error("⚠️ Error al eliminar imagen en Cloudinary:", error);
+      }
+    }
+
+    db.query(qDelete, [id], (err) => {
+      if (err)
+        return res.status(500).json({ error: "Error al eliminar el aliado" });
+      return res.json({ message: "✅ Aliado eliminado correctamente" });
+    });
   });
 });
 
