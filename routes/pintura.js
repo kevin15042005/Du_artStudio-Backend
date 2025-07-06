@@ -199,11 +199,13 @@ router.delete("/:id", async (req, res) => {
 });
 
 // Funciones auxiliares
+
 function safeParseJSON(str) {
+  if (Array.isArray(str)) return str;
   try {
-    return str ? JSON.parse(str) : [];
+    return JSON.parse(str);
   } catch {
-    return Array.isArray(str) ? str : [];
+    return [];
   }
 }
 
