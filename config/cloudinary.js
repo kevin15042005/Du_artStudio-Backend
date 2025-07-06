@@ -1,4 +1,4 @@
-// config/cloudinary.js
+// ✅ config/cloudinary.js
 import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 import multer from "multer";
@@ -6,7 +6,6 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Configuración más robusta con verificación
 if (!process.env.CLOUDINARY_CLOUD_NAME || 
     !process.env.CLOUDINARY_API_KEY || 
     !process.env.CLOUDINARY_API_SECRET) {
@@ -23,7 +22,7 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: "pintura-images", // Cambiado a carpeta específica para pintura
+    folder: "pintura-images",
     allowed_formats: ["jpg", "jpeg", "png", "webp"],
     transformation: [{ width: 1200, height: 800, crop: "limit" }],
     resource_type: "auto"
