@@ -46,8 +46,8 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
   try {
     // Mapear las imágenes subidas a Cloudinary
     const coverData = req.files.map((file) => ({
-      url: file.secure_url,
-      public_id: file.public_id,
+      url: file.path, // ✅ esta es la URL real en Cloudinary
+      public_id: file.filename, // ✅ este es el ID público
     }));
 
     const q = `INSERT INTO Noticias_Pintura 
@@ -122,8 +122,8 @@ router.put("/:id", upload.array("cover", 10), async (req, res) => {
 
       // Crear nuevo array con las nuevas imágenes
       currentCover = req.files.map((file) => ({
-        url: file.secure_url,
-        public_id: file.public_id,
+        url: file.path, // ✅ esta es la URL real en Cloudinary
+        public_id: file.filename, // ✅ este es el ID público
       }));
     }
 
