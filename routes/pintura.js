@@ -1,4 +1,4 @@
-// ✅ BACKEND: rutas de Noticias_Pintura (Versión Corregida con subida real a Cloudinary)
+// ✅ BACKEND: rutas de Noticias_Pintura (Versión Corregida y Validada)
 import express from "express";
 import db from "../db.js";
 import { upload, cloudinary } from "../config/cloudinary.js";
@@ -27,29 +27,21 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Crear noticia de pintura con subida real a Cloudinary
+// Crear noticia de pintura con Cloudinary
 router.post("/crear", upload.array("cover", 10), async (req, res) => {
   const { nombre_Noticia_Pintura, contenido_Noticia_Pintura } = req.body;
 
-  if (!nombre_Noticia_Pintura || !contenido_Noticia_Pintura || !req.files.length) {
+  if (!nombre_Noticia_Pintura || !contenido_Noticia_Pintura || !req.files?.length) {
     return res.status(400).json({
       message: "Todos los campos son obligatorios y al menos una imagen es requerida",
     });
   }
 
   try {
-    const coverData = await Promise.all(
-      req.files.map(async (file) => {
-        const result = await cloudinary.uploader.upload(file.path, {
-          folder: "NoticiasPintura",
-        });
-
-        return {
-          url: result.secure_url,
-          public_id: result.public_id,
-        };
-      })
-    );
+    const coverData = req.files.map((file) => ({
+      url: file.path,
+      public_id: file.filename,
+    }));
 
     const q = `INSERT INTO Noticias_Pintura 
                (nombre_Noticia_Pintura, contenido_Noticia_Pintura, fecha_Publicacion, id_Administrador, cover) 
@@ -68,6 +60,15 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
     });
   } catch (err) {
     console.error("Error al crear noticia:", err);
+    if (req.files?.length) {
+      await Promise.all(
+        req.files.map((file) =>
+          cloudinary.uploader.destroy(file.public_id).catch((e) =>
+            console.error("Error limpiando imágenes fallidas:", e)
+          )
+        )
+      );
+    }
     return res.status(500).json({
       error: "Error al crear noticia",
       details: err.message,
@@ -75,20 +76,21 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
   }
 });
 
-// Actualizar noticia de pintura con subida real a Cloudinary
+// Actualizar noticia de pintura con Cloudinary
 router.put("/:id", upload.array("cover", 10), async (req, res) => {
   const { id } = req.params;
   const { nombre_Noticia_Pintura, contenido_Noticia_Pintura } = req.body;
 
   if (!id || !nombre_Noticia_Pintura || !contenido_Noticia_Pintura) {
-    return res.status(400).json({ message: "ID, título y contenido son obligatorios" });
+    return res.status(400).json({
+      message: "ID, título y contenido son obligatorios",
+    });
   }
 
   try {
-    const [noticia] = await db.promise().query(
-      `SELECT cover FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?`,
-      [id]
-    );
+    const [noticia] = await db
+      .promise()
+      .query(`SELECT cover FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?`, [id]);
 
     if (!noticia.length) {
       return res.status(404).json({ error: "Noticia no encontrada" });
@@ -96,21 +98,12 @@ router.put("/:id", upload.array("cover", 10), async (req, res) => {
 
     let currentCover = safeParseJSON(noticia[0].cover) || [];
 
-    if (req.files.length > 0) {
+    if (Array.isArray(req.files) && req.files.length > 0) {
       await deleteCloudinaryImages(currentCover);
-
-      currentCover = await Promise.all(
-        req.files.map(async (file) => {
-          const result = await cloudinary.uploader.upload(file.path, {
-            folder: "NoticiasPintura",
-          });
-
-          return {
-            url: result.secure_url,
-            public_id: result.public_id,
-          };
-        })
-      );
+      currentCover = req.files.map((file) => ({
+        url: file.path,
+        public_id: file.filename,
+      }));
     }
 
     const q = `UPDATE Noticias_Pintura 
@@ -132,6 +125,15 @@ router.put("/:id", upload.array("cover", 10), async (req, res) => {
     });
   } catch (err) {
     console.error("Error al actualizar noticia:", err);
+    if (Array.isArray(req.files) && req.files.length > 0) {
+      await Promise.all(
+        req.files.map((file) =>
+          cloudinary.uploader.destroy(file.public_id).catch((e) =>
+            console.error("Error limpiando imágenes fallidas:", e)
+          )
+        )
+      );
+    }
     return res.status(500).json({
       error: "Error al actualizar noticia",
       details: err.message,
@@ -144,10 +146,9 @@ router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [noticia] = await db.promise().query(
-      "SELECT cover FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?",
-      [id]
-    );
+    const [noticia] = await db
+      .promise()
+      .query("SELECT cover FROM Noticias_Pintura WHERE id_Noticias_Pintura = ?", [id]);
 
     if (noticia.length === 0) {
       return res.status(404).json({ error: "Noticia no encontrada" });
@@ -177,7 +178,6 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// Funciones auxiliares
 function safeParseJSON(str) {
   if (!str) return [];
   if (typeof str === "string") {
@@ -196,7 +196,6 @@ function safeParseJSON(str) {
 
 async function deleteCloudinaryImages(images) {
   if (!Array.isArray(images)) return;
-
   await Promise.all(
     images.map((img) => {
       if (img?.public_id) {
