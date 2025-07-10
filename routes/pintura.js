@@ -49,6 +49,8 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
         public_id: file.public_id, // ✅ CORRECTO
       }))
       .filter((img) => img.url);
+      console.log("🎯 Datos que se guardarán como 'cover':", coverData);
+
 
     const q = `INSERT INTO Noticias_Pintura 
                (nombre_Noticia_Pintura, contenido_Noticia_Pintura, fecha_Publicacion, id_Administrador, cover) 
