@@ -29,6 +29,7 @@ router.get("/", async (req, res) => {
 // Crear noticia de pintura con Cloudinary
 router.post("/crear", upload.array("cover", 10), async (req, res) => {
   const { nombre_Noticia_Pintura, contenido_Noticia_Pintura } = req.body;
+  console.log("🧾 Archivos recibidos por multer/Cloudinary:", req.files);
 
   if (
     !nombre_Noticia_Pintura ||
@@ -44,7 +45,7 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
   try {
     const coverData = req.files
       .map((file) => ({
-        url: file.secure_url,      // ✅ CORRECTO
+        url: file.secure_url, // ✅ CORRECTO
         public_id: file.public_id, // ✅ CORRECTO
       }))
       .filter((img) => img.url);
@@ -116,8 +117,8 @@ router.put("/:id", upload.array("cover", 10), async (req, res) => {
 
       currentCover = req.files
         .map((file) => ({
-          url: file.secure_url,       // ✅ CORREGIDO
-          public_id: file.public_id,  // ✅ CORREGIDO
+          url: file.secure_url, // ✅ CORREGIDO
+          public_id: file.public_id, // ✅ CORREGIDO
         }))
         .filter((img) => img.url);
     }
