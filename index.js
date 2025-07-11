@@ -10,11 +10,14 @@ import AliadosRouter from "./routes/aliados.js";
 
 const app = express();
 
-app.use(cors({
-  origin: process.env.VITE_API_URL, 
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: "https://du-art-studio-fron-end.vercel.app",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
+
 app.use("/noticias", noticiasRoutes);
 app.use("/pintura", noticiasPinturaRoutes);
 app.use("/Shop", ShopRoutes);
@@ -33,7 +36,11 @@ app.use("/uploads", express.static("uploads"));
 
 // Iniciar servidor
 app.listen(8080, () => {
-  console.log(`🚀 Servidor corriendo en ${process.env.VITE_API_URL || "http://localhost:8080"}`);
+  console.log(
+    `🚀 Servidor corriendo en ${
+      process.env.VITE_API_URL || "http://localhost:8080"
+    }`
+  );
 });
 
 // Cerrar conexión limpia
