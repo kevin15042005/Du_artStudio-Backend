@@ -48,13 +48,15 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
       VALUES (?, ?, ?, ?, ?)
     `;
 
-    const [result] = await db.promise().query(q, [
-      nombre_Shop,
-      contenido_Shop,
-      precio_Shop,
-      1,
-      JSON.stringify(coverData),
-    ]);
+    const [result] = await db
+      .promise()
+      .query(q, [
+        nombre_Shop,
+        contenido_Shop,
+        precio_Shop,
+        1,
+        JSON.stringify(coverData),
+      ]);
 
     res.status(201).json({
       message: "✅ Artículo creado correctamente",
@@ -76,12 +78,12 @@ router.put("/", upload.array("cover", 10), async (req, res) => {
   }
 
   try {
-    const [rows] = await db.promise().query(
-      `SELECT cover FROM Shop WHERE id_Shop = ?`,
-      [id_Shop]
-    );
+    const [rows] = await db
+      .promise()
+      .query(`SELECT cover FROM Shop WHERE id_Shop = ?`, [id_Shop]);
 
-    if (!rows.length) return res.status(404).json({ error: "Artículo no encontrado" });
+    if (!rows.length)
+      return res.status(404).json({ error: "Artículo no encontrado" });
 
     let coverActual = safeParseJSON(rows[0].cover);
 
@@ -93,10 +95,18 @@ router.put("/", upload.array("cover", 10), async (req, res) => {
       }));
     }
 
-    await db.promise().query(
-      `UPDATE Shop SET nombre_Shop=?, contenido_Shop=?, precio_Shop=?, cover=? WHERE id_Shop=?`,
-      [nombre_Shop, contenido_Shop, precio_Shop, JSON.stringify(coverActual), id_Shop]
-    );
+    await db
+      .promise()
+      .query(
+        `UPDATE Shop SET nombre_Shop=?, contenido_Shop=?, precio_Shop=?, cover=? WHERE id_Shop=?`,
+        [
+          nombre_Shop,
+          contenido_Shop,
+          precio_Shop,
+          JSON.stringify(coverActual),
+          id_Shop,
+        ]
+      );
 
     res.json({ message: "✅ Artículo actualizado", cover: coverActual });
   } catch (err) {
@@ -111,17 +121,18 @@ router.delete("/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    const [rows] = await db.promise().query(
-      `SELECT cover FROM Shop WHERE id_Shop = ?`,
-      [id]
-    );
+    const [rows] = await db
+      .promise()
+      .query(`SELECT cover FROM Shop WHERE id_Shop = ?`, [id]);
 
-    if (!rows.length) return res.status(404).json({ error: "Artículo no encontrado" });
+    if (!rows.length)
+      return res.status(404).json({ error: "Artículo no encontrado" });
 
     const cover = safeParseJSON(rows[0].cover);
     await deleteCloudinaryImages(cover);
 
     await db.promise().query(`DELETE FROM Shop WHERE id_Shop = ?`, [id]);
+    console.log("📦 ARTÍCULOS ENVIADOS AL FRONT:", articulos); // 👀
 
     res.json({ message: "✅ Artículo eliminado", deletedImages: cover.length });
   } catch (err) {
@@ -135,9 +146,11 @@ async function deleteCloudinaryImages(images) {
   await Promise.all(
     images.map((img) =>
       img.public_id
-        ? cloudinary.uploader.destroy(img.public_id).catch((err) =>
-            console.error(`❌ Error eliminando ${img.public_id}:`, err)
-          )
+        ? cloudinary.uploader
+            .destroy(img.public_id)
+            .catch((err) =>
+              console.error(`❌ Error eliminando ${img.public_id}:`, err)
+            )
         : Promise.resolve()
     )
   );
@@ -148,9 +161,11 @@ async function limpiarImagenesCloudinary(files) {
   await Promise.all(
     files.map((file) =>
       file.public_id
-        ? cloudinary.uploader.destroy(file.public_id).catch((err) =>
-            console.error(`❌ Error limpiando ${file.public_id}:`, err)
-          )
+        ? cloudinary.uploader
+            .destroy(file.public_id)
+            .catch((err) =>
+              console.error(`❌ Error limpiando ${file.public_id}:`, err)
+            )
         : Promise.resolve()
     )
   );
