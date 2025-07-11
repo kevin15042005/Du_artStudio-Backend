@@ -10,8 +10,11 @@ import AliadosRouter from "./routes/aliados.js";
 
 const app = express();
 
-app.use(cors());
-
+app.use(cors({
+  origin: process.env.VITE_API_URL, 
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true,
+}));
 app.use("/noticias", noticiasRoutes);
 app.use("/pintura", noticiasPinturaRoutes);
 app.use("/Shop", ShopRoutes);
