@@ -30,6 +30,7 @@ const storage = new CloudinaryStorage({
     allowed_formats: ["jpg", "jpeg", "png", "webp"],
     resource_type: "image", // Importante para que no lo suba como raw
     transformation: [{ width: 1200, height: 800, crop: "limit" }],
+    public_id: `${Date.now()}-${file.originalname}`, // 💥 esto genera el public_id y permite acceder luego
   },
 });
 
