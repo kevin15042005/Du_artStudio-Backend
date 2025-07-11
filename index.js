@@ -12,27 +12,30 @@ import AliadosRouter from "./routes/aliados.js";
 
 const app = express();
 
-// ✅ Cambia esta URL por tu frontend en Vercel
 const FRONTEND_URL = "https://du-art-studio-fron-end.vercel.app";
 
-// ✅ CORS: Permitir peticiones desde Vercel
+// ✅ CORS antes de las rutas
 app.use(cors({
   origin: FRONTEND_URL,
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
+  optionsSuccessStatus: 200,
 }));
+
+// ✅ Aceptar preflight (opcional pero recomendado)
+app.options("*", cors());
 
 // ✅ Middleware para JSON
 app.use(express.json());
 
-// ✅ Rutas de tu app
+// ✅ Rutas
 app.use("/noticias", noticiasRoutes);
 app.use("/pintura", noticiasPinturaRoutes);
 app.use("/Shop", ShopRoutes);
 app.use("/admin", adminRouter);
 app.use("/api/aliados", AliadosRouter);
 
-// ✅ Carpeta de imágenes locales (si usas multer local)
+// ✅ Carpeta local de imágenes (si aplica)
 if (!fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");
   console.log("📂 Carpeta 'uploads' creada");
@@ -45,7 +48,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
 });
 
-// ✅ Cerrar conexión limpia a MySQL al apagar
+// ✅ Cierre de conexión MySQL limpio
 process.on("SIGINT", () => {
   db.end((err) => {
     if (err) console.error("❌ Error cerrando conexión a MySQL:", err);
