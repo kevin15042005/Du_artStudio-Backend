@@ -25,13 +25,15 @@ cloudinary.config({
 // Configurar almacenamiento en Cloudinary
 const storage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: "Assets", // Carpeta donde se guardan las imágenes
+  params: async (req, file) => ({
+    folder: "Assets",
     allowed_formats: ["jpg", "jpeg", "png", "webp"],
-    resource_type: "image", // Importante para que no lo suba como raw
+    resource_type: "image",
     transformation: [{ width: 1200, height: 800, crop: "limit" }],
-  },
+    public_id: `${Date.now()}-${file.originalname}`, // obligatorio para que retorne public_id
+  }),
 });
+
 
 // Configurar multer con el almacenamiento en Cloudinary
 const upload = multer({
