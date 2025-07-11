@@ -3,14 +3,28 @@ import db from "../db.js";
 import { upload, cloudinary } from "../config/cloudinary.js";
 
 const router = express.Router();
+function safeParseJSON(str) {
+  try {
+    const parsed = typeof str === "string" ? JSON.parse(str) : str;
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [];
+  }
+}
 
 // Obtener todos los artículos
-router.get("/", (req, res) => {
-  const q = "SELECT * FROM Shop";
-  db.query(q, (err, data) => {
-    if (err) return res.status(500).json({ error: "Error en la consulta" });
-    return res.json(data);
-  });
+router.get("/", async (req, res) => {
+  try {
+    const [articulos] = await db.query("SELECT * FROM Shop");
+    const formateados = articulos.map((item) => ({
+      ...item,
+      cover: safeParseJSON(item.cover),
+    }));
+    res.json(formateados);
+  } catch (err) {
+    console.error("Error al obtener artículos:", err);
+    res.status(500).json({ error: "Error al obtener artículos" });
+  }
 });
 
 // Crear artículo con múltiples imágenes
@@ -24,8 +38,8 @@ router.post("/crear", upload.array("cover"), (req, res) => {
   }
 
   const coverData = req.files.map((file) => ({
-    url: file.path,         // secure_url
-    public_id: file.filename, // public_id
+    url: file?.secure_url || file?.path || "",
+    public_id: file?.public_id || file?.filename || "",
   }));
 
   const cover = JSON.stringify(coverData);
@@ -47,8 +61,8 @@ router.put("/", upload.array("cover"), (req, res) => {
   const { id_Shop, nombre_Shop, contenido_Shop, precio_Shop } = req.body;
 
   const newCoverData = req.files.map((file) => ({
-    url: file.path,
-    public_id: file.filename,
+    url: file?.secure_url || file?.path || "",
+    public_id: file?.public_id || file?.filename || "",
   }));
 
   const newCover = newCoverData.length ? JSON.stringify(newCoverData) : null;
@@ -62,7 +76,8 @@ router.put("/", upload.array("cover"), (req, res) => {
     : [nombre_Shop, contenido_Shop, precio_Shop, id_Shop];
 
   db.query(q, values, (err) => {
-    if (err) return res.status(500).json({ error: "Error al actualizar artículo" });
+    if (err)
+      return res.status(500).json({ error: "Error al actualizar artículo" });
     return res.json({ message: "✅ Artículo actualizado correctamente" });
   });
 });
@@ -83,13 +98,19 @@ router.delete("/:id_Shop", (req, res) => {
       try {
         await cloudinary.uploader.destroy(img.public_id);
       } catch (error) {
-        console.error("❌ Error eliminando imagen de Cloudinary:", img.public_id);
+        console.error(
+          "❌ Error eliminando imagen de Cloudinary:",
+          img.public_id
+        );
       }
     }
 
     db.query(qDelete, [id_Shop], (err) => {
-      if (err) return res.status(500).json({ error: "Error al eliminar artículo" });
-      return res.json({ message: "✅ Artículo e imágenes eliminadas correctamente" });
+      if (err)
+        return res.status(500).json({ error: "Error al eliminar artículo" });
+      return res.json({
+        message: "✅ Artículo e imágenes eliminadas correctamente",
+      });
     });
   });
 });

@@ -30,7 +30,7 @@ const storage = new CloudinaryStorage({
     allowed_formats: ["jpg", "jpeg", "png", "webp"],
     resource_type: "image",
     transformation: [{ width: 1200, height: 800, crop: "limit" }],
-    public_id: `${Date.now()}-${file.originalname}`, // esto es esencial
+    public_id: `${Date.now()}-${file.originalname}`, 
   }),
 });
 

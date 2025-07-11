@@ -4,6 +4,15 @@ import { upload, cloudinary } from "../config/cloudinary.js";
 
 const router = express.Router();
 
+function safeParseJSON(str) {
+  try {
+    const parsed = typeof str === "string" ? JSON.parse(str) : str;
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return [];
+  }
+}
+
 // ✅ Obtener todas las noticias
 router.get("/", async (req, res) => {
   try {
@@ -13,15 +22,21 @@ router.get("/", async (req, res) => {
       FROM Noticias 
       ORDER BY fecha_Publicacion DESC
     `);
-    res.json(noticias);
+
+    const formateadas = noticias.map((n) => ({
+      ...n,
+      cover: safeParseJSON(n.cover),
+    }));
+
+    res.json(formateadas);
   } catch (err) {
-    console.error("Error al obtener noticias:", err);
+    console.error("❌ Error al obtener noticias:", err);
     res.status(500).json({ error: "Error al obtener noticias" });
   }
 });
 
 // ✅ Crear noticia con múltiples imágenes
-router.post("/crear", upload.array("cover", 3), async (req, res) => {
+router.post("/crear", upload.array("cover", 10), async (req, res) => {
   try {
     const { nombre_Noticias, contenido_Noticia } = req.body;
 
@@ -30,8 +45,8 @@ router.post("/crear", upload.array("cover", 3), async (req, res) => {
     }
 
     const coverData = req.files.map((file) => ({
-      url: file.path, // secure_url
-      public_id: file.filename,
+      url: file?.secure_url || file?.path || "",
+      public_id: file?.public_id || file?.filename || "",
     }));
 
     const cover = JSON.stringify(coverData);
@@ -49,115 +64,82 @@ router.post("/crear", upload.array("cover", 3), async (req, res) => {
       id: result.insertId,
     });
   } catch (err) {
-    console.error("Error al crear noticia:", err);
+    console.error("❌ Error al crear noticia:", err);
     res.status(500).json({ error: "Error al crear noticia" });
   }
 });
 
 // ✅ Actualizar noticia con reemplazo opcional de imágenes
-router.put("/:id", upload.array("cover", 3), async (req, res) => {
+router.put("/:id", upload.array("cover", 10), async (req, res) => {
   try {
     const { id } = req.params;
     const { nombre_Noticias, contenido_Noticia } = req.body;
 
-    const [noticia] = await db
-      .promise()
-      .query("SELECT cover FROM Noticias WHERE id_Noticia = ?", [id]);
+    const [rows] = await db.promise().query(
+      "SELECT cover FROM Noticias WHERE id_Noticia = ?",
+      [id]
+    );
 
-    if (noticia.length === 0) {
+    if (!rows.length) {
       return res.status(404).json({ error: "Noticia no encontrada" });
     }
 
-    // Si vienen nuevas imágenes, eliminamos las anteriores
-    let newCover = null;
-    if (req.files.length > 0) {
-      const oldCover = JSON.parse(noticia[0].cover || "[]");
-      for (const img of oldCover) {
+    let coverActual = safeParseJSON(rows[0].cover);
+
+    if (req.files?.length > 0) {
+      for (const img of coverActual) {
         try {
           await cloudinary.uploader.destroy(img.public_id);
-        } catch (error) {
-          console.error("❌ Error eliminando imagen antigua:", img.public_id);
+        } catch (err) {
+          console.error("❌ Error eliminando imagen anterior:", img.public_id);
         }
       }
 
-      const newCoverData = req.files.map((file) => ({
-        url: file.secure_url, 
-        public_id: file.public_id, 
+      coverActual = req.files.map((file) => ({
+        url: file?.secure_url || file?.path || "",
+        public_id: file?.public_id || file?.filename || "",
       }));
-
-      newCover = JSON.stringify(newCoverData);
     }
 
-    // Armar query dinámica
-    const query = newCover
-      ? `UPDATE Noticias SET nombre_Noticias=?, contenido_Noticia=?, cover=? WHERE id_Noticia=?`
-      : `UPDATE Noticias SET nombre_Noticias=?, contenido_Noticia=? WHERE id_Noticia=?`;
-
-    const values = newCover
-      ? [nombre_Noticias, contenido_Noticia, newCover, id]
-      : [nombre_Noticias, contenido_Noticia, id];
-
-    const [result] = await db.promise().query(query, values);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "No se pudo actualizar" });
-    }
+    await db.promise().query(
+      `UPDATE Noticias 
+       SET nombre_Noticias = ?, contenido_Noticia = ?, cover = ? 
+       WHERE id_Noticia = ?`,
+      [nombre_Noticias, contenido_Noticia, JSON.stringify(coverActual), id]
+    );
 
     res.json({ message: "✅ Noticia actualizada correctamente" });
   } catch (err) {
-    console.error("Error al actualizar noticia:", err);
+    console.error("❌ Error al actualizar noticia:", err);
     res.status(500).json({ error: "Error al actualizar noticia" });
   }
 });
 
-// ✅ Eliminar noticia y sus imágenes de Cloudinary
+// ✅ Eliminar noticia y sus imágenes
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [noticia] = await db
-      .promise()
-      .query("SELECT cover FROM Noticias WHERE id_Noticia = ?", [id]);
+    const [rows] = await db.promise().query(
+      "SELECT cover FROM Noticias WHERE id_Noticia = ?",
+      [id]
+    );
 
-    if (noticia.length === 0) {
+    if (!rows.length) {
       return res.status(404).json({ error: "Noticia no encontrada" });
     }
 
-    let coverData = [];
+    const coverData = safeParseJSON(rows[0].cover);
 
-    try {
-      // ✅ Si cover es un JSON válido
-      coverData = JSON.parse(noticia[0].cover || "[]");
-    } catch (err) {
-      console.warn(
-        "⚠️ Cover no es JSON válido, intentando como string separado por comas."
-      );
-      // ✅ Si es una cadena separada por comas (ej: "img1.jpg,img2.jpg")
-      const stringCovers = (noticia[0].cover || "").split(",");
-      coverData = stringCovers.map((filename) => ({
-        public_id: filename.trim(), // asume que filename === public_id
-      }));
-    }
-
-    // ✅ Eliminar imágenes de Cloudinary
     for (const img of coverData) {
-      if (img.public_id) {
-        try {
-          await cloudinary.uploader.destroy(img.public_id);
-        } catch (err) {
-          console.error("❌ Error eliminando imagen:", img.public_id);
-        }
+      try {
+        await cloudinary.uploader.destroy(img.public_id);
+      } catch (err) {
+        console.error("❌ Error eliminando imagen:", img.public_id);
       }
     }
 
-    // ✅ Eliminar la noticia
-    const [result] = await db
-      .promise()
-      .query("DELETE FROM Noticias WHERE id_Noticia = ?", [id]);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "No se pudo eliminar" });
-    }
+    await db.promise().query("DELETE FROM Noticias WHERE id_Noticia = ?", [id]);
 
     res.json({ message: "✅ Noticia e imágenes eliminadas correctamente" });
   } catch (err) {
