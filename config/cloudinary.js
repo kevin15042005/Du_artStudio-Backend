@@ -22,23 +22,21 @@ cloudinary.config({
   secure: true,
 });
 
-// ✅ Almacenamiento en Cloudinary (CORREGIDO: usar `filename` y `folder`)
+// Configurar almacenamiento en Cloudinary
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: "Assets", // ✅ Tu carpeta en Cloudinary
-    allowed_formats: ["jpg", "jpeg", "png", "webp"], // ✅ Tipos permitidos
-    resource_type: "image",
+    folder: "Assets", // Carpeta donde se guardan las imágenes
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    resource_type: "image", // Importante para que no lo suba como raw
     transformation: [{ width: 1200, height: 800, crop: "limit" }],
-    format: "jpg", // opcional: fuerza formato final
-    public_id: (req, file) => `${Date.now()}-${file.originalname}`, // ✅ OJO: debe ser función si necesitas personalizar
   },
 });
 
-// ✅ Multer con Cloudinary
+// Configurar multer con el almacenamiento en Cloudinary
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // Límite 5 MB por imagen
+  limits: { fileSize: 5 * 1024 * 1024 }, // Límite 5 MB por archivo
 });
 
 export { cloudinary, upload };
