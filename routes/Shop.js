@@ -28,7 +28,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Crear artículo con múltiples imágenes
+// Crear artículo
 router.post("/crear", upload.array("cover"), (req, res) => {
   const { nombre_Shop, contenido_Shop, precio_Shop } = req.body;
 
@@ -55,7 +55,7 @@ router.post("/crear", upload.array("cover"), (req, res) => {
   });
 });
 
-// Actualizar artículo (opcionalmente reemplazar imágenes)
+// Actualizar artículo
 router.put("/", upload.array("cover"), (req, res) => {
   const { id_Shop, nombre_Shop, contenido_Shop, precio_Shop } = req.body;
 
@@ -78,10 +78,18 @@ router.put("/", upload.array("cover"), (req, res) => {
     if (err) {
       return res.status(500).json({ error: "Error al actualizar artículo" });
     }
-    return res.json({
-      message: "✅ Artículo actualizado correctamente",
-      cover: newCoverData || [],
-    });
+    return res.json({ message: "✅ Artículo actualizado correctamente" });
+  });
+});
+
+// Eliminar artículo
+router.delete("/:id", (req, res) => {
+  const { id } = req.params;
+  db.query("DELETE FROM Shop WHERE id_Shop = ?", [id], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: "Error al eliminar artículo" });
+    }
+    return res.json({ message: "✅ Artículo eliminado correctamente" });
   });
 });
 
