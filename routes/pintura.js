@@ -35,10 +35,13 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
   }
 
   try {
-    const coverData = req.files.map((file) => ({
-      url: file.secure_url,
-      public_id: file.public_id,
-    }));
+    const coverData = req.files.map((file) => {
+      const url = file?.secure_url || file?.path || "";
+      const public_id = file?.public_id || file?.filename || "";
+      return { url, public_id };
+    });
+
+    console.log("🧾 coverData a guardar:", coverData);
 
     const q = `INSERT INTO Noticias_Pintura 
       (nombre_Noticia_Pintura, contenido_Noticia_Pintura, fecha_Publicacion, id_Administrador, cover) 
@@ -80,10 +83,11 @@ router.put("/:id", upload.array("cover", 10), async (req, res) => {
 
     if (req.files?.length > 0) {
       await deleteCloudinaryImages(coverActual);
-      coverActual = req.files.map((file) => ({
-        url: file.secure_url,
-        public_id: file.public_id,
-      }));
+      coverActual = req.files.map((file) => {
+        const url = file?.secure_url || file?.path || "";
+        const public_id = file?.public_id || file?.filename || "";
+        return { url, public_id };
+      });
     }
 
     await db.promise().query(`
