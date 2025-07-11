@@ -3,6 +3,7 @@ import db from "../db.js";
 import { upload, cloudinary } from "../config/cloudinary.js";
 
 const router = express.Router();
+
 function safeParseJSON(str) {
   try {
     const parsed = typeof str === "string" ? JSON.parse(str) : str;
@@ -32,9 +33,7 @@ router.post("/crear", upload.array("cover"), (req, res) => {
   const { nombre_Shop, contenido_Shop, precio_Shop } = req.body;
 
   if (!nombre_Shop || !contenido_Shop || !precio_Shop || !req.files.length) {
-    return res
-      .status(400)
-      .json({ message: "Todos los campos son obligatorios" });
+    return res.status(400).json({ message: "Todos los campos son obligatorios" });
   }
 
   const coverData = req.files.map((file) => ({
@@ -76,41 +75,12 @@ router.put("/", upload.array("cover"), (req, res) => {
     : [nombre_Shop, contenido_Shop, precio_Shop, id_Shop];
 
   db.query(q, values, (err) => {
-    if (err)
+    if (err) {
       return res.status(500).json({ error: "Error al actualizar artículo" });
-    return res.json({ message: "✅ Artículo actualizado correctamente" });
-  });
-});
-
-// Eliminar artículo + imágenes de Cloudinary
-router.delete("/:id_Shop", (req, res) => {
-  const id_Shop = req.params.id_Shop;
-  const qGet = `SELECT cover FROM Shop WHERE id_Shop = ?`;
-  const qDelete = `DELETE FROM Shop WHERE id_Shop = ?`;
-
-  db.query(qGet, [id_Shop], async (err, result) => {
-    if (err || result.length === 0)
-      return res.status(500).json({ error: "Error obteniendo imagen" });
-
-    const coverData = JSON.parse(result[0].cover || "[]");
-
-    for (const img of coverData) {
-      try {
-        await cloudinary.uploader.destroy(img.public_id);
-      } catch (error) {
-        console.error(
-          "❌ Error eliminando imagen de Cloudinary:",
-          img.public_id
-        );
-      }
     }
-
-    db.query(qDelete, [id_Shop], (err) => {
-      if (err)
-        return res.status(500).json({ error: "Error al eliminar artículo" });
-      return res.json({
-        message: "✅ Artículo e imágenes eliminadas correctamente",
-      });
+    return res.json({
+      message: "✅ Artículo actualizado correctamente",
+      cover: newCoverData || [],
     });
   });
 });
