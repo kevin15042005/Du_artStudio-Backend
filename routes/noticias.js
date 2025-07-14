@@ -13,13 +13,14 @@ function safeParseJSON(str) {
   }
 }
 
-// ✅ Obtener todas las noticias
+// 🔍 Obtener todas las noticias
 router.get("/", async (req, res) => {
   try {
     const [noticias] = await db.promise().query(`
-      SELECT id_Noticia, nombre_Noticias, contenido_Noticia, 
-             fecha_Publicacion, cover 
-      FROM Noticias 
+      SELECT n.id_Noticia, n.nombre_Noticias, n.contenido_Noticia, 
+             n.fecha_Publicacion, n.cover, a.nombre_Administrador
+      FROM Noticias n
+      JOIN Administrador a ON n.id_Administrador = a.id_Administrador
       ORDER BY fecha_Publicacion DESC
     `);
 
@@ -35,12 +36,12 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ Crear noticia con múltiples imágenes
+// 📝 Crear noticia
 router.post("/crear", upload.array("cover", 10), async (req, res) => {
   try {
-    const { nombre_Noticias, contenido_Noticia } = req.body;
+    const { nombre_Noticias, contenido_Noticia, id_Administrador } = req.body;
 
-    if (!nombre_Noticias || !contenido_Noticia || !req.files.length) {
+    if (!nombre_Noticias || !contenido_Noticia || !id_Administrador || !req.files.length) {
       return res.status(400).json({ error: "Todos los campos son requeridos" });
     }
 
@@ -55,8 +56,8 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
       `INSERT INTO Noticias (
         nombre_Noticias, contenido_Noticia, 
         fecha_Publicacion, id_Administrador, cover
-      ) VALUES (?, ?, NOW(), 1, ?)`,
-      [nombre_Noticias, contenido_Noticia, cover]
+      ) VALUES (?, ?, NOW(), ?, ?)`,
+      [nombre_Noticias, contenido_Noticia, id_Administrador, cover]
     );
 
     res.status(201).json({
@@ -69,7 +70,7 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
   }
 });
 
-// ✅ Actualizar noticia con reemplazo opcional de imágenes
+// 🔄 Actualizar noticia
 router.put("/:id", upload.array("cover", 10), async (req, res) => {
   try {
     const { id } = req.params;
@@ -115,7 +116,7 @@ router.put("/:id", upload.array("cover", 10), async (req, res) => {
   }
 });
 
-// ✅ Eliminar noticia y sus imágenes
+// ❌ Eliminar noticia
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
