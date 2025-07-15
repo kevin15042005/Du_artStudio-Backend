@@ -4,7 +4,6 @@ import { upload, cloudinary } from "../config/cloudinary.js";
 
 const router = express.Router();
 
-// 🔧 Función segura para parsear JSON
 function safeParseJSON(str) {
   try {
     const parsed = typeof str === "string" ? JSON.parse(str) : str;
@@ -14,27 +13,25 @@ function safeParseJSON(str) {
   }
 }
 
-// 📥 Función para limpiar imágenes en caso de error
 async function limpiarImagenesCloudinary(files) {
   await Promise.all(
     files.map((file) =>
       file.public_id
-        ? cloudinary.uploader.destroy(file.public_id).catch((err) =>
-            console.error(`❌ Error limpiando ${file.public_id}:`, err)
-          )
+        ? cloudinary.uploader
+            .destroy(file.public_id)
+            .catch((err) => console.error(`❌ Error limpiando ${file.public_id}:`, err))
         : Promise.resolve()
     )
   );
 }
 
-// 🧹 Función para eliminar imágenes antiguas
 async function deleteCloudinaryImages(images) {
   await Promise.all(
     images.map((img) =>
       img.public_id
-        ? cloudinary.uploader.destroy(img.public_id).catch((err) =>
-            console.error(`❌ Error eliminando ${img.public_id}:`, err)
-          )
+        ? cloudinary.uploader
+            .destroy(img.public_id)
+            .catch((err) => console.error(`❌ Error eliminando ${img.public_id}:`, err))
         : Promise.resolve()
     )
   );
@@ -45,7 +42,7 @@ router.get("/", async (req, res) => {
   try {
     const [noticias] = await db.promise().query(`
       SELECT n.id_Noticia, n.nombre_Noticias, n.contenido_Noticia, 
-             n.fecha_Publicacion, n.cover, a.nombre_Administrador
+             n.fecha_Publicacion, n.cover, n.enlace, a.nombre_Administrador
       FROM Noticias n
       JOIN Administrador a ON n.id_Administrador = a.id_Administrador
       ORDER BY fecha_Publicacion DESC
@@ -65,7 +62,7 @@ router.get("/", async (req, res) => {
 
 // 📝 Crear noticia
 router.post("/crear", upload.array("cover", 10), async (req, res) => {
-  const { nombre_Noticias, contenido_Noticia, id_Administrador } = req.body;
+  const { nombre_Noticias, contenido_Noticia, id_Administrador, enlace } = req.body;
 
   if (!nombre_Noticias || !contenido_Noticia || !id_Administrador || !req.files?.length) {
     return res.status(400).json({ message: "Faltan datos o imágenes" });
@@ -78,14 +75,15 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
     }));
 
     const q = `INSERT INTO Noticias 
-      (nombre_Noticias, contenido_Noticia, fecha_Publicacion, id_Administrador, cover) 
-      VALUES (?, ?, NOW(), ?, ?)`;
+      (nombre_Noticias, contenido_Noticia, fecha_Publicacion, id_Administrador, cover, enlace) 
+      VALUES (?, ?, NOW(), ?, ?, ?)`;
 
     const [result] = await db.promise().query(q, [
       nombre_Noticias,
       contenido_Noticia,
       id_Administrador,
       JSON.stringify(coverData),
+      enlace || ""
     ]);
 
     res.status(201).json({ message: "✅ Noticia creada exitosamente", id: result.insertId });
@@ -99,17 +97,14 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
 // 🔄 Actualizar noticia
 router.put("/:id", upload.array("cover", 10), async (req, res) => {
   const { id } = req.params;
-  const { nombre_Noticias, contenido_Noticia } = req.body;
+  const { nombre_Noticias, contenido_Noticia, enlace } = req.body;
 
   if (!id || !nombre_Noticias || !contenido_Noticia) {
     return res.status(400).json({ message: "Faltan campos obligatorios" });
   }
 
   try {
-    const [rows] = await db.promise().query(
-      `SELECT cover FROM Noticias WHERE id_Noticia = ?`,
-      [id]
-    );
+    const [rows] = await db.promise().query(`SELECT cover FROM Noticias WHERE id_Noticia = ?`, [id]);
 
     if (!rows.length) return res.status(404).json({ error: "No encontrada" });
 
@@ -125,12 +120,13 @@ router.put("/:id", upload.array("cover", 10), async (req, res) => {
 
     await db.promise().query(`
       UPDATE Noticias 
-      SET nombre_Noticias = ?, contenido_Noticia = ?, cover = ?
+      SET nombre_Noticias = ?, contenido_Noticia = ?, cover = ?, enlace = ?
       WHERE id_Noticia = ?
     `, [
       nombre_Noticias,
       contenido_Noticia,
       JSON.stringify(coverActual),
+      enlace || "",
       id,
     ]);
 
@@ -147,10 +143,7 @@ router.delete("/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    const [rows] = await db.promise().query(
-      `SELECT cover FROM Noticias WHERE id_Noticia = ?`,
-      [id]
-    );
+    const [rows] = await db.promise().query(`SELECT cover FROM Noticias WHERE id_Noticia = ?`, [id]);
 
     if (!rows.length) return res.status(404).json({ error: "No encontrada" });
 
