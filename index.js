@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import fs from "fs";
 import db from "./db.js";
+import { initSchema } from "./db/schema.js";
 
 // Rutas
 import noticiasRoutes from "./routes/noticias.js";
@@ -9,6 +10,9 @@ import noticiasPinturaRoutes from "./routes/pintura.js";
 import ShopRoutes from "./routes/Shop.js";
 import adminRouter from "./routes/admin.js";
 import AliadosRouter from "./routes/aliados.js";
+import clienteRouter from "./routes/cliente.js";
+import procesoRouter from "./routes/proceso.js";
+import inventarioRouter from "./routes/inventario.js";
 
 const app = express();
 
@@ -36,12 +40,19 @@ app.use("/pintura", noticiasPinturaRoutes);
 app.use("/Shop", ShopRoutes);
 app.use("/admin", adminRouter);
 app.use("/api/aliados", AliadosRouter);
+app.use("/cliente", clienteRouter);
+app.use("/proceso", procesoRouter);
+app.use("/inventario", inventarioRouter);
 
 // ✅ Iniciar servidor
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en ${process.env.VITE_API_URL || `http://localhost:${PORT}`}`);
-});
+initSchema(db)
+  .catch((err) => console.error("❌ Error creando el esquema de cliente/proceso:", err))
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor corriendo en ${process.env.VITE_API_URL || `http://localhost:${PORT}`}`);
+    });
+  });
 
 // ✅ Cerrar conexión limpia
 process.on("SIGINT", () => {

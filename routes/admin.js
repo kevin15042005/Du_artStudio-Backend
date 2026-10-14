@@ -1,12 +1,17 @@
 // routes/admin.js
 import express from "express";
+import bcrypt from "bcryptjs";
 import db from "../db.js";
 
 const router = express.Router();
 
+// Los hashes de bcrypt siempre empiezan con $2a$, $2b$ o $2y$
+const esHashBcrypt = (valor) => typeof valor === "string" && /^\$2[aby]\$/.test(valor);
+
 // Obtener todos los administradores
 router.get("/", (req, res) => {
-  const q = "SELECT * FROM Administrador";
+  const q =
+    "SELECT id_Administrador, nombre_Administrador, correo_Administrador, rol_Administrador FROM Administrador";
   db.query(q, (err, data) => {
     if (err) return res.status(500).json({ error: "Error al obtener datos" });
     return res.json(data);
@@ -14,7 +19,7 @@ router.get("/", (req, res) => {
 });
 
 // Registro de administrador
-router.post("/register", (req, res) => {
+router.post("/register", async (req, res) => {
   const {
     nombre_Administrador,
     contraseña_Administrador,
@@ -29,7 +34,7 @@ router.post("/register", (req, res) => {
   db.query(
     chekUsuario,
     [nombre_Administrador, correo_Administrador],
-    (err, data) => {
+    async (err, data) => {
       if (err) {
         return res.status(500).json({
           message: "❌ Error al verificar , duplicado usuario",
@@ -47,16 +52,19 @@ router.post("/register", (req, res) => {
           message: "El PIN de seguridad debe tener exactamente 4 caracteres.",
         });
       }
+
+      const hash = await bcrypt.hash(contraseña_Administrador, 10);
+
       const q = `
-        INSERT INTO Administrador 
-        (nombre_Administrador, contraseña_Administrador, correo_Administrador, rol_Administrador, pin_seguridad) 
+        INSERT INTO Administrador
+        (nombre_Administrador, contraseña_Administrador, correo_Administrador, rol_Administrador, pin_seguridad)
         VALUES (?, ?, ?, ? , ?)`;
 
       db.query(
         q,
         [
           nombre_Administrador,
-          contraseña_Administrador,
+          hash,
           correo_Administrador,
           rol_Administrador,
           pin_seguridad,
@@ -81,21 +89,46 @@ router.post("/register", (req, res) => {
 // Inicio de sesión
 router.post("/login", (req, res) => {
   const { correo_Administrador, contraseña_Administrador } = req.body;
-  const q =
-    "SELECT * FROM Administrador WHERE correo_Administrador = ? AND contraseña_Administrador = ?";
+  const q = "SELECT * FROM Administrador WHERE correo_Administrador = ?";
 
-  db.query(q, [correo_Administrador, contraseña_Administrador], (err, data) => {
+  db.query(q, [correo_Administrador], async (err, data) => {
     if (err)
       return res.status(500).json({ message: "❌ Error en el servidor", error: err });
 
-    if (data.length > 0) {
-      return res.json({
-        message: "✅ Inicio de sesión exitoso",
-        usuario: data[0],
-      });
+    if (data.length === 0) {
+      return res.status(401).json({ message: "❌ Credenciales incorrectas" });
     }
 
-    return res.status(401).json({ message: "❌ Credenciales incorrectas" });
+    const admin = data[0];
+    const hashGuardado = admin.contraseña_Administrador;
+
+    // Cuentas ya migradas a bcrypt
+    if (esHashBcrypt(hashGuardado)) {
+      const coincide = await bcrypt.compare(contraseña_Administrador, hashGuardado);
+      if (!coincide) {
+        return res.status(401).json({ message: "❌ Credenciales incorrectas" });
+      }
+      delete admin.contraseña_Administrador;
+      return res.json({ message: "✅ Inicio de sesión exitoso", usuario: admin });
+    }
+
+    // Cuenta antigua con contraseña en texto plano: si coincide, se migra a bcrypt
+    if (contraseña_Administrador !== hashGuardado) {
+      return res.status(401).json({ message: "❌ Credenciales incorrectas" });
+    }
+
+    try {
+      const nuevoHash = await bcrypt.hash(contraseña_Administrador, 10);
+      db.query(
+        "UPDATE Administrador SET contraseña_Administrador = ? WHERE id_Administrador = ?",
+        [nuevoHash, admin.id_Administrador]
+      );
+    } catch (hashErr) {
+      console.error("❌ Error migrando contraseña a bcrypt:", hashErr);
+    }
+
+    delete admin.contraseña_Administrador;
+    return res.json({ message: "✅ Inicio de sesión exitoso", usuario: admin });
   });
 });
 
@@ -105,7 +138,7 @@ router.put("/update", (req, res) => {
 
   const verificarQuery = "SELECT pin_seguridad FROM Administrador WHERE correo_Administrador = ?";
 
-  db.query(verificarQuery, [correo_Administrador], (err, data) => {
+  db.query(verificarQuery, [correo_Administrador], async (err, data) => {
     if (err)
       return res.status(500).json({ message: "❌ Error al verificar pin", error: err });
 
@@ -119,10 +152,11 @@ router.put("/update", (req, res) => {
       return res.status(400).json({ message: "❌ El pin no es correcto" });
     }
 
+    const nuevoHash = await bcrypt.hash(nuevaContraseña, 10);
     const actualizarQuery =
       "UPDATE Administrador SET contraseña_Administrador = ? WHERE correo_Administrador = ?";
 
-    db.query(actualizarQuery, [nuevaContraseña, correo_Administrador], (err) => {
+    db.query(actualizarQuery, [nuevoHash, correo_Administrador], (err) => {
       if (err)
         return res.status(500).json({ message: "❌ Error al actualizar contraseña", error: err });
 
