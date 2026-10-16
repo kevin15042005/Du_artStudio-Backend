@@ -28,7 +28,7 @@ router.get("/", async (req, res) => {
 
 // Crear noticia
 router.post("/crear", upload.array("cover", 10), async (req, res) => {
-  const { nombre_Noticia_Pintura, contenido_Noticia_Pintura } = req.body;
+  const { nombre_Noticia_Pintura, contenido_Noticia_Pintura, id_Administrador } = req.body;
 
   if (!nombre_Noticia_Pintura || !contenido_Noticia_Pintura || !req.files?.length) {
     return res.status(400).json({ message: "Faltan datos o imágenes" });
@@ -50,7 +50,7 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
     const [result] = await db.promise().query(q, [
       nombre_Noticia_Pintura,
       contenido_Noticia_Pintura,
-      1,
+      id_Administrador || 1,
       JSON.stringify(coverData),
     ]);
 

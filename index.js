@@ -16,10 +16,14 @@ import inventarioRouter from "./routes/inventario.js";
 
 const app = express();
 
-// ✅ CORS: permitir frontend de Vercel
-const FRONTEND_URL = "https://du-art-studio-fron-end.vercel.app";
+// ✅ CORS: permitir frontend de Vercel y el servidor de desarrollo de Vite
+const ORIGENES_PERMITIDOS = [
+  "https://du-art-studio-fron-end.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:4173",
+];
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: ORIGENES_PERMITIDOS,
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 }));

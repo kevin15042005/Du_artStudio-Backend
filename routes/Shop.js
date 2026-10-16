@@ -31,7 +31,7 @@ router.get("/", async (req, res) => {
 
 // ✅ Crear artículo con imágenes
 router.post("/crear", upload.array("cover", 10), async (req, res) => {
-  const { nombre_Shop, contenido_Shop, precio_Shop } = req.body;
+  const { nombre_Shop, contenido_Shop, precio_Shop, id_Administrador } = req.body;
 
   if (!nombre_Shop || !contenido_Shop || !precio_Shop || !req.files?.length) {
     return res.status(400).json({ message: "Faltan campos o imágenes" });
@@ -54,7 +54,7 @@ router.post("/crear", upload.array("cover", 10), async (req, res) => {
         nombre_Shop,
         contenido_Shop,
         precio_Shop,
-        1,
+        id_Administrador || 1,
         JSON.stringify(coverData),
       ]);
 
@@ -132,7 +132,6 @@ router.delete("/:id", async (req, res) => {
     await deleteCloudinaryImages(cover);
 
     await db.promise().query(`DELETE FROM Shop WHERE id_Shop = ?`, [id]);
-    console.log("📦 ARTÍCULOS ENVIADOS AL FRONT:", articulos); // 👀
 
     res.json({ message: "✅ Artículo eliminado", deletedImages: cover.length });
   } catch (err) {
