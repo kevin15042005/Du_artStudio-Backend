@@ -8,9 +8,7 @@ API de la plataforma web de un taller de pintura y personalización de motocicle
 
 | Integrante | Rol |
 |---|---|
-| [Nombre del integrante 1] | [Rol] |
-| [Nombre del integrante 2] | [Rol] |
-| [Nombre del integrante 3] | [Rol] |
+| Kevin Alejandro Reyes Sarmiento | Desarrollador Full Stack |
 
 ---
 
